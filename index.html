@@ -8,7 +8,7 @@
     body {
       margin: 0;
       overflow: hidden;
-      background-color: #1a66b8;
+      background-color: #0d3b66;
       font-family: Arial, sans-serif;
     }
     canvas {
@@ -19,13 +19,13 @@
       top: 15px;
       left: 15px;
       color: white;
-      background: rgba(0, 0, 0, 0.65);
+      background: rgba(0, 0, 0, 0.75);
       padding: 15px;
       border-radius: 6px;
       pointer-events: none;
+      border: 1px solid rgba(255, 255, 255, 0.2);
     }
   </style>
-  <!-- Load Three.js Library from CDN so the 3D world can render -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -39,230 +39,145 @@
   </div>
 
   <script>
-    // --- THREE.JS TOP-DOWN 3D NAVAL GAME ---
+    // --- THREE.JS TOP-DOWN 3D NAVAL GAME (FIXED SCALE & RENDERING) ---
 
     const container = document.body;
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1a66b8);
-    scene.fog = new THREE.FogExp2(0x1a66b8, 0.00015);
+    scene.background = new THREE.Color(0x104f8a);
 
-    // Top-Down High-Angle Camera
-    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
-    camera.position.set(0, 1200, 400);
+    // Optimized Top-Down Isometric Camera
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 15000);
+    camera.position.set(0, 450, 250);
     camera.lookAt(0, 0, 0);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(renderer.domElement);
 
-    // --- LIGHTING ---
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    // --- CLEAN LIGHTING SETUP ---
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     scene.add(ambientLight);
 
-    const sunLight = new THREE.DirectionalLight(0xfffaed, 1.2);
-    sunLight.position.set(500, 1200, 800);
+    const sunLight = new THREE.DirectionalLight(0xfffaed, 1.3);
+    sunLight.position.set(300, 800, 500);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 2048;
     sunLight.shadow.mapSize.height = 2048;
-    sunLight.shadow.camera.near = 100;
-    sunLight.shadow.camera.far = 3000;
-    const d = 1500;
-    sunLight.shadow.camera.left = -d;
-    sunLight.shadow.camera.right = d;
-    sunLight.shadow.camera.top = d;
-    sunLight.shadow.camera.bottom = -d;
     scene.add(sunLight);
 
-    // --- PROCEDURAL WOODEN PLANK TEXTURE GENERATOR ---
-    function createPlankTexture(isHull) {
-      const canvasTex = document.createElement("canvas");
-      canvasTex.width = 512;
-      canvasTex.height = 512;
-      const ctx = canvasTex.getContext("2d");
-
-      ctx.fillStyle = isHull ? "#4a2c11" : "#c2a378";
-      ctx.fillRect(0, 0, 512, 512);
-
-      const plankHeight = 16;
-      ctx.strokeStyle = "#241305";
-      ctx.lineWidth = 1.5;
-
-      for (let y = 0; y < 512; y += plankHeight) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(512, y);
-        ctx.stroke();
-
-        const offset = (y / plankHeight) % 2 === 0 ? 0 : 64;
-        for (let x = offset; x < 512; x += 128) {
-          ctx.beginPath();
-          ctx.moveTo(x, y);
-          ctx.lineTo(x, y + plankHeight);
-          ctx.stroke();
-
-          ctx.fillStyle = "#111";
-          ctx.fillRect(x + 2, y + 3, 2, 2);
-          ctx.fillRect(x + 2, y + plankHeight - 5, 2, 2);
-        }
-      }
-
-      const texture = new THREE.CanvasTexture(canvasTex);
-      texture.wrapS = THREE.RepeatWrapping;
-      texture.wrapT = THREE.RepeatWrapping;
-      texture.repeat.set(2, 2);
-      return texture;
-    }
-
-    const hullPlankTex = createPlankTexture(true);
-    const deckPlankTex = createPlankTexture(false);
-
-    // --- PROCEDURAL 3D CURVED SHIP MESH CREATOR ---
-    function createCurvedShipMesh(isFrench) {
+    // --- PROCEDURAL 3D DETAILED SHIP MODEL ---
+    function createDetailedShip(isFrench) {
       const shipGroup = new THREE.Group();
 
-      const hullShape = new THREE.Shape();
-      hullShape.moveTo(0, -35);
-      hullShape.bezierCurveTo(18, -25, 20, 10, 18, 30);
-      hullShape.quadraticCurveTo(14, 38, 0, 38);
-      hullShape.quadraticCurveTo(-14, 38, -18, 30);
-      hullShape.bezierCurveTo(-20, 10, -18, -25, 0, -35);
-
-      const extrudeSettings = {
-        steps: 1,
-        depth: 18,
-        bevelEnabled: true,
-        bevelThickness: 3,
-        bevelSize: 2,
-        bevelSegments: 4
-      };
-
-      const hullGeo = new THREE.ExtrudeGeometry(hullShape, extrudeSettings);
-      hullGeo.rotateX(Math.PI / 2);
-
-      const mainMat = new THREE.MeshStandardMaterial({
-        map: hullPlankTex,
-        color: isFrench ? 0x222222 : 0x5c3a21,
-        roughness: 0.7
+      // Hull Material (Deep Oak / Trafalgar Black)
+      const hullMat = new THREE.MeshStandardMaterial({
+        color: isFrench ? 0x1f1f1f : 0x4a2e18,
+        roughness: 0.6,
+        metalness: 0.1
       });
 
-      const hullMesh = new THREE.Mesh(hullGeo, mainMat);
+      // Copper bottom hull
+      const copperGeo = new THREE.BoxGeometry(36, 14, 90);
+      const copperMat = new THREE.MeshStandardMaterial({ color: 0xb87333, roughness: 0.5 });
+      const copperMesh = new THREE.Mesh(copperGeo, copperMat);
+      copperMesh.position.set(0, 4, 0);
+      copperMesh.castShadow = true;
+      shipGroup.add(copperMesh);
+
+      // Main Hull Body
+      const hullGeo = new THREE.BoxGeometry(40, 22, 96);
+      const hullMesh = new THREE.Mesh(hullGeo, hullMat);
+      hullMesh.position.set(0, 18, 0);
       hullMesh.castShadow = true;
-      hullMesh.receiveShadow = true;
       shipGroup.add(hullMesh);
 
-      const deckGeo = new THREE.ShapeGeometry(hullShape);
-      const deckMat = new THREE.MeshStandardMaterial({ map: deckPlankTex, roughness: 0.6 });
+      // Gun Deck Stripes (Trafalgar Yellow / White)
+      const stripeMat = new THREE.MeshStandardMaterial({ color: isFrench ? 0xfbc02d : 0xdddddd });
+      const stripeGeo1 = new THREE.BoxGeometry(42, 4, 98);
+      const stripe1 = new THREE.Mesh(stripeGeo1, stripeMat);
+      stripe1.position.set(0, 16, 0);
+      shipGroup.add(stripe1);
+
+      // Wooden Deck
+      const deckGeo = new THREE.BoxGeometry(38, 2, 90);
+      const deckMat = new THREE.MeshStandardMaterial({ color: 0xd2b48c, roughness: 0.8 });
       const deckMesh = new THREE.Mesh(deckGeo, deckMat);
-      deckMesh.rotation.x = -Math.PI / 2;
-      deckMesh.position.y = 10;
+      deckMesh.position.set(0, 30, 0);
       shipGroup.add(deckMesh);
 
+      // Triple Masts & Square Sails
       const mastMat = new THREE.MeshStandardMaterial({ color: 0x3d2314, roughness: 0.8 });
-      const sailMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, side: THREE.DoubleSide, roughness: 0.5 });
+      const sailMat = new THREE.MeshStandardMaterial({ color: 0xfafafa, side: THREE.DoubleSide, roughness: 0.5 });
 
-      // Triple masts & billowing sails
-      [-15, 5, 22].forEach((zPos, index) => {
-        const mastGeo = new THREE.CylinderGeometry(1.2, 2, 50 - index * 5, 8);
+      [-22, 0, 25].forEach((zPos, idx) => {
+        const mastHeight = 70 - idx * 8;
+        const mastGeo = new THREE.CylinderGeometry(1.5, 2.2, mastHeight, 8);
         const mastMesh = new THREE.Mesh(mastGeo, mastMat);
-        mastMesh.position.set(0, 25, zPos);
+        mastMesh.position.set(0, mastHeight / 2 + 30, zPos);
         mastMesh.castShadow = true;
         shipGroup.add(mastMesh);
 
-        [18, 32].forEach((yPos) => {
-          const yardGeo = new THREE.CylinderGeometry(0.8, 0.8, 28 - index * 3, 8);
-          yardGeo.rotateZ(Math.PI / 2);
-          const yardMesh = new THREE.Mesh(yardGeo, mastMat);
-          yardMesh.position.set(0, yPos, zPos);
-          shipGroup.add(yardMesh);
-
-          const sailGeo = new THREE.PlaneGeometry(26 - index * 3, 12, 8, 8);
-          const pos = sailGeo.attributes.position;
-          for (let i = 0; i < pos.count; i++) {
-            const z = pos.getZ(i);
-            const x = pos.getX(i);
-            pos.setZ(i, z - Math.sin((x / 26) * Math.PI) * 4);
+        // Sails
+        [35, 55].forEach(yHeight => {
+          if (yHeight < mastHeight + 20) {
+            const sailGeo = new THREE.BoxGeometry(34 - idx * 4, 16, 1.5);
+            const sailMesh = new THREE.Mesh(sailGeo, sailMat);
+            sailMesh.position.set(0, yHeight, zPos);
+            sailMesh.castShadow = true;
+            shipGroup.add(sailMesh);
           }
-          sailGeo.computeVertexNormals();
-
-          const sailMesh = new THREE.Mesh(sailGeo, sailMat);
-          sailMesh.position.set(0, yPos - 5, zPos - 2);
-          sailMesh.castShadow = true;
-          shipGroup.add(sailMesh);
         });
       });
 
-      // Flank Cannons
+      // Flank Cannons (Strictly 90 degrees out of sides)
       const cannonMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8 });
-      [-20, -10, 0, 10, 20].forEach(zPos => {
-        const portGun = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1, 8, 8), cannonMat);
+      [-30, -15, 0, 15, 30].forEach(zPos => {
+        // Port Cannon (Left)
+        const portGun = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1, 10, 8), cannonMat);
         portGun.rotation.z = Math.PI / 2;
-        portGun.position.set(-18, 8, zPos);
+        portGun.position.set(-22, 20, zPos);
         shipGroup.add(portGun);
 
-        const stbdGun = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1, 8, 8), cannonMat);
+        // Starboard Cannon (Right)
+        const stbdGun = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1, 10, 8), cannonMat);
         stbdGun.rotation.z = -Math.PI / 2;
-        stbdGun.position.set(18, 8, zPos);
+        stbdGun.position.set(22, 20, zPos);
         shipGroup.add(stbdGun);
       });
 
+      // National Flag at Stern
+      const flagGeo = new THREE.BoxGeometry(12, 8, 1);
+      const flagMat = new THREE.MeshBasicMaterial({ color: isFrench ? 0x0d47a1 : 0xffffff });
+      const flagMesh = new THREE.Mesh(flagGeo, flagMat);
+      flagMesh.position.set(0, 65, -46);
+      shipGroup.add(flagMesh);
+
+      shipGroup.scale.set(1.2, 1.2, 1.2);
       return shipGroup;
     }
 
-    // --- WORLD SETUP ---
-    const coastlinePolygons = [
-      {
-        points: [
-          { x: -3500, y: 3200 }, { x: -2500, y: 2800 }, { x: -1700, y: 2500 }, 
-          { x: -900, y: 2200 },  { x: 0, y: 2050 },     { x: 1300, y: 2000 },   
-          { x: 2400, y: 1550 },  { x: 2300, y: 1100 },  { x: 1750, y: 900 },   
-          { x: 2500, y: -350 },  { x: 1450, y: -950 },  { x: -450, y: -3100 }, 
-          { x: -2800, y: -1100 },{ x: -3100, y: 0 },     { x: -1700, y: 800 }
-        ]
-      }
-    ];
-
-    function create3DCoastline() {
-      coastlinePolygons.forEach(coast => {
-        const shape = new THREE.Shape();
-        coast.points.forEach((pt, idx) => {
-          if (idx === 0) shape.moveTo(pt.x, pt.y);
-          else shape.lineTo(pt.x, pt.y);
-        });
-
-        const extrudeSettings = { depth: 80, bevelEnabled: true, bevelThickness: 10 };
-        const landGeo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-        landGeo.rotateX(Math.PI / 2);
-
-        const landMat = new THREE.MeshStandardMaterial({ color: 0x2e7d32, roughness: 0.9 });
-        const landMesh = new THREE.Mesh(landGeo, landMat);
-        landMesh.position.y = -10;
-        landMesh.receiveShadow = true;
-        scene.add(landMesh);
-      });
-    }
-    create3DCoastline();
-
-    const oceanGeo = new THREE.PlaneGeometry(10000, 10000, 64, 64);
-    const oceanMat = new THREE.MeshStandardMaterial({ color: 0x1a66b8, roughness: 0.1, metalness: 0.8 });
+    // --- OCEAN FLOOR & WATER PLANE ---
+    const oceanGeo = new THREE.PlaneGeometry(15000, 15000, 32, 32);
+    const oceanMat = new THREE.MeshStandardMaterial({ color: 0x1a66b8, roughness: 0.2, metalness: 0.5 });
     const oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
     oceanMesh.rotation.x = -Math.PI / 2;
-    oceanMesh.position.y = 0;
-    oceanMesh.receiveShadow = true;
+    oceanMesh.position.y = -5;
     scene.add(oceanMesh);
 
-    // --- PLAYER & CONTROLS ---
-    const playerMesh = createCurvedShipMesh(false);
+    // --- PLAYER CREATION ---
+    const playerMesh = createDetailedShip(false);
     scene.add(playerMesh);
 
     const player = {
       mesh: playerMesh,
-      x: -700,
-      z: 2900,
+      x: 0,
+      z: 0,
       speed: 0,
-      maxSpeed: 2.5,
-      angle: Math.PI / 2,
+      maxSpeed: 3.0,
+      angle: 0,
       turnSpeed: 0.035,
       sailSetting: 1,
       health: 120,
@@ -290,41 +205,42 @@
       keys[e.key.toLowerCase()] = false;
     });
 
+    // --- PRECISE FLANK CANNON FIRING ---
     function fireBroadside(side) {
-      const ballSpeed = 12.0;
+      const ballSpeed = 14.0;
 
       function spawnSideVolley(isPort) {
         const flankAngle = player.angle + (isPort ? -Math.PI / 2 : Math.PI / 2);
         const vx = Math.sin(flankAngle) * ballSpeed;
         const vz = Math.cos(flankAngle) * ballSpeed;
 
-        [-15, -5, 5, 15].forEach(offsetZ => {
-          const ballGeo = new THREE.SphereGeometry(2, 8, 8);
+        [-25, -12, 0, 12, 25].forEach(offsetZ => {
+          const ballGeo = new THREE.SphereGeometry(2.5, 8, 8);
           const ballMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
           const ballMesh = new THREE.Mesh(ballGeo, ballMat);
 
-          const spawnX = player.x + Math.sin(player.angle) * offsetZ + Math.sin(flankAngle) * 20;
-          const spawnZ = player.z + Math.cos(player.angle) * offsetZ + Math.cos(flankAngle) * 20;
+          const spawnX = player.x + Math.sin(player.angle) * offsetZ + Math.sin(flankAngle) * 26;
+          const spawnZ = player.z + Math.cos(player.angle) * offsetZ + Math.cos(flankAngle) * 26;
 
-          ballMesh.position.set(spawnX, 8, spawnZ);
+          ballMesh.position.set(spawnX, 20, spawnZ);
           scene.add(ballMesh);
 
           cannonballs.push({
             mesh: ballMesh,
             vx: vx,
             vz: vz,
-            life: 70
+            life: 80
           });
         });
       }
 
       if ((side === "left" || side === "both") && player.cooldownLeft <= 0) {
         spawnSideVolley(true);
-        player.cooldownLeft = 30;
+        player.cooldownLeft = 25;
       }
       if ((side === "right" || side === "both") && player.cooldownRight <= 0) {
         spawnSideVolley(false);
-        player.cooldownRight = 30;
+        player.cooldownRight = 25;
       }
     }
 
@@ -335,15 +251,15 @@
       if (player.cooldownLeft > 0) player.cooldownLeft--;
       if (player.cooldownRight > 0) player.cooldownRight--;
 
-      if (keys["a"]) player.angle -= player.turnSpeed;
-      if (keys["d"]) player.angle += player.turnSpeed;
+      if (keys["a"]) player.angle += player.turnSpeed;
+      if (keys["d"]) player.angle -= player.turnSpeed;
 
       let targetSpeed = 0;
       if (player.sailSetting === 1) targetSpeed = player.maxSpeed * 0.5;
       if (player.sailSetting === 2) targetSpeed = player.maxSpeed;
       if (player.sailSetting === -1) targetSpeed = -player.maxSpeed * 0.3;
 
-      player.speed += (targetSpeed - player.speed) * 0.05;
+      player.speed += (targetSpeed - player.speed) * 0.06;
 
       player.x += Math.sin(player.angle) * player.speed;
       player.z += Math.cos(player.angle) * player.speed;
@@ -351,8 +267,9 @@
       player.mesh.position.set(player.x, 0, player.z);
       player.mesh.rotation.y = player.angle;
 
+      // Smooth Camera tracking directly above player
       camera.position.x = player.x;
-      camera.position.z = player.z + 400;
+      camera.position.z = player.z + 350;
       camera.lookAt(player.x, 0, player.z);
 
       for (let i = cannonballs.length - 1; i >= 0; i--) {
