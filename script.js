@@ -1,7 +1,7 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// --- VASTLY SCALED ENGLAND & WALES GEOGRAPHY (~3.5x Magnification) ---
+// --- GEOGRAPHICALLY ACCURATE & VAST ENGLAND & WALES COASTLINE ---
 const coastlinePolygons = [
   {
     fill: "#2e7d32",
@@ -31,7 +31,7 @@ const coastlinePolygons = [
   }
 ];
 
-// --- DETAILED HISTORICAL DOCKYARDS & PORTS ---
+// --- HISTORICAL PORTS ---
 const ports = [
   { name: "Plymouth Sound", x: -2500, y: 2850, radius: 140, angle: 0.2 },
   { name: "Portsmouth Royal Dockyard", x: 550, y: 2120, radius: 140, angle: -0.1 },
@@ -45,12 +45,12 @@ const wind = { angle: Math.PI / 4, changeTimer: 0 };
 // --- PLAYER SHIP ---
 const player = {
   x: -700,
-  y: 2900, // Starts off English Channel
+  y: 2900, // Starts out in deep waters of English Channel
   width: 28,
   height: 52,
   speed: 0,
   maxSpeed: 2.3,
-  angle: Math.PI / 2, // Facing East up the Channel
+  angle: Math.PI / 2,
   turnSpeed: 0.038,
   sailSetting: 1,
   health: 100,
@@ -60,36 +60,77 @@ const player = {
   isDocked: false
 };
 
-// --- FLEETS (SQUADRON FORMATIONS) ---
+// --- FLEETS (SQUADRONS & ENCIRCLEMENT AI) ---
 const enemies = [];
 const allies = [];
 
-function spawnSquadron(centerX, centerY, faction, formationType) {
-  const count = 4;
-  const spacingX = 90;
-  const spacingY = 160;
+// Point-in-Polygon Detection
+function isPointInPolygon(point, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].x, yi = polygon[i].y;
+    const xj = polygon[j].x, yj = polygon[j].y;
+    const intersect = ((yi > point.y) !== (yj > point.y)) &&
+      (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
 
+function checkLandCollision(x, y) {
+  for (const coast of coastlinePolygons) {
+    if (isPointInPolygon({ x, y }, coast.points)) return true;
+  }
+  return false;
+}
+
+// GUARANTEED OCEAN SPAWN GENERATOR
+function findSafeOceanPoint(baseX, baseY) {
+  let testX = baseX;
+  let testY = baseY;
+  let radius = 50;
+
+  while (checkLandCollision(testX, testY)) {
+    // Spiral outward toward open water if base point touches land
+    testX = baseX + (Math.random() - 0.5) * radius * 2;
+    testY = baseY + radius;
+    radius += 100;
+  }
+  return { x: testX, y: testY };
+}
+
+// HISTORICAL SQUADRON FORMATION GENERATOR (Line Ahead / Line Abreast)
+function spawnSquadron(centerX, centerY, faction, formationType) {
+  const count = 5; // 5 Ships of the Line per Squadron
+  const safeCenter = findSafeOceanPoint(centerX, centerY);
+
+  const spacing = 80;
   for (let i = 0; i < count; i++) {
     let offsetX = 0;
     let offsetY = 0;
 
     if (formationType === "LINE_AHEAD") {
-      offsetY = i * spacingY;
-    } else if (formationType === "COLUMN_ABREAST") {
-      offsetX = i * spacingX;
-      offsetY = (i % 2) * 60;
+      // Single-file line of battle
+      offsetY = (i - Math.floor(count / 2)) * spacing;
+    } else if (formationType === "LINE_ABREAST") {
+      // Parallel wall formation
+      offsetX = (i - Math.floor(count / 2)) * spacing;
     }
 
+    const finalPos = findSafeOceanPoint(safeCenter.x + offsetX, safeCenter.y + offsetY);
+
     const ship = {
-      x: centerX + offsetX,
-      y: centerY + offsetY,
+      id: Math.random(),
+      x: finalPos.x,
+      y: finalPos.y,
       width: 28,
       height: 52,
       speed: 1.25,
       angle: faction === "ENEMY" ? Math.PI : 0,
       health: 80,
       maxHealth: 80,
-      cooldown: i * 30
+      cooldown: i * 25,
+      pincerRole: i % 2 === 0 ? "PORT_PINCER" : "STARBOARD_PINCER" // Encirclement roles
     };
 
     if (faction === "ENEMY") enemies.push(ship);
@@ -97,13 +138,13 @@ function spawnSquadron(centerX, centerY, faction, formationType) {
   }
 }
 
-// Deploy fleets across Channel and North Sea
-spawnSquadron(800, 2600, "ENEMY", "LINE_AHEAD");
-spawnSquadron(2000, -400, "ENEMY", "COLUMN_ABREAST");
-spawnSquadron(2800, 800, "ENEMY", "LINE_AHEAD");
+// Spawn Historical Fleets in Deep Waters
+spawnSquadron(1000, 3200, "ENEMY", "LINE_AHEAD");   // Channel Armada
+spawnSquadron(2600, -200, "ENEMY", "LINE_ABREAST");  // North Sea Squadron
+spawnSquadron(3200, 1200, "ENEMY", "LINE_AHEAD");   // Dover Blockade
 
-spawnSquadron(-1000, 2600, "ALLIED", "LINE_AHEAD");
-spawnSquadron(-400, 2200, "ALLIED", "COLUMN_ABREAST");
+spawnSquadron(-1200, 3000, "ALLIED", "LINE_AHEAD");  // Royal Navy Escort
+spawnSquadron(-200, 2600, "ALLIED", "LINE_ABREAST");
 
 const cannonballs = [];
 const wakeParticles = [];
@@ -114,15 +155,11 @@ let victoryMusicPlayed = false;
 let defeatMusicPlayed = false;
 let audioCtx = null;
 
-// --- PROCEDURAL AUDIO SYNTHESIZER ---
 function getAudioContext() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   return audioCtx;
 }
 
-// "Rule, Britannia!" Anthem (Victory)
 function playRuleBritannia() {
   if (victoryMusicPlayed) return;
   victoryMusicPlayed = true;
@@ -151,13 +188,11 @@ function playRuleBritannia() {
   });
 }
 
-// "La Marseillaise" French Anthem (Defeat)
 function playLaMarseillaise() {
   if (defeatMusicPlayed) return;
   defeatMusicPlayed = true;
 
   const ctxAudio = getAudioContext();
-  // Opening brass fanfare motif of La Marseillaise
   const melody = [
     { f: 293.66, d: 0.3 }, { f: 293.66, d: 0.3 }, { f: 293.66, d: 0.3 },
     { f: 392.00, d: 0.8 }, { f: 392.00, d: 0.8 }, { f: 440.00, d: 0.8 },
@@ -198,13 +233,10 @@ window.addEventListener("keyup", (e) => {
   keys[e.key.toLowerCase()] = false;
 });
 
-// --- ABSOLUTE PERPENDICULAR BROADSIDE CANNON FIRING ---
+// Broadside Cannons
 function fireCannons(side) {
-  const ballSpeed = 10.5; // Long range cannon physics
+  const ballSpeed = 10.5;
 
-  // Correct 90-degree flank vector math:
-  // Port Vector (Left)      = (-cos(angle), -sin(angle))
-  // Starboard Vector (Right) = (cos(angle), sin(angle))
   function spawnSideVolley(isPort) {
     const dir = isPort ? -1 : 1;
     const flankX = Math.cos(player.angle) * dir;
@@ -219,43 +251,23 @@ function fireCannons(side) {
         y: spawnY,
         vx: flankX * ballSpeed,
         vy: flankY * ballSpeed,
-        life: 75, // Long distance travel
+        life: 75,
         faction: "PLAYER"
       });
     });
   }
 
   if ((side === "left" || side === "both") && player.cooldownLeft <= 0) {
-    spawnSideVolley(true);  // Port / Left
+    spawnSideVolley(true);
     player.cooldownLeft = 32;
   }
   if ((side === "right" || side === "both") && player.cooldownRight <= 0) {
-    spawnSideVolley(false); // Starboard / Right
+    spawnSideVolley(false);
     player.cooldownRight = 32;
   }
 }
 
-// Point-in-Polygon Land Detection
-function isPointInPolygon(point, polygon) {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i].x, yi = polygon[i].y;
-    const xj = polygon[j].x, yj = polygon[j].y;
-    const intersect = ((yi > point.y) !== (yj > point.y)) &&
-      (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi);
-    if (intersect) inside = !inside;
-  }
-  return inside;
-}
-
-function checkLandCollision(x, y) {
-  for (const coast of coastlinePolygons) {
-    if (isPointInPolygon({ x, y }, coast.points)) return true;
-  }
-  return false;
-}
-
-// --- UPDATE GAME LOGIC ---
+// --- UPDATE LOGIC ---
 function update() {
   if (player.health <= 0) return;
 
@@ -308,7 +320,7 @@ function update() {
     });
   }
 
-  // Port Docking Checks
+  // Ports
   player.isDocked = false;
   ports.forEach((port) => {
     if (Math.hypot(player.x - port.x, player.y - port.y) < port.radius) {
@@ -319,7 +331,7 @@ function update() {
     }
   });
 
-  // Particle updates
+  // Particles
   for (let i = wakeParticles.length - 1; i >= 0; i--) {
     const p = wakeParticles[i];
     p.radius += 0.1;
@@ -332,36 +344,46 @@ function update() {
     if (p.life <= 0) splashParticles.splice(i, 1);
   }
 
-  // --- ENEMY AI WITH ANTI-STRANDING NAVIGATION ---
+  // --- COORDINATED ENCIRCLEMENT ENEMY AI ---
   enemies.forEach((enemy) => {
     if (enemy.health <= 0) return;
 
     let target = player;
     let minDist = Math.hypot(player.x - enemy.x, player.y - enemy.y);
-    allies.forEach(ally => {
-      if (ally.health > 0) {
-        const d = Math.hypot(ally.x - enemy.x, ally.y - enemy.y);
-        if (d < minDist) {
-          minDist = d;
-          target = ally;
-        }
-      }
-    });
 
-    if (minDist < 1200) {
-      const desiredAngle = Math.atan2(target.x - enemy.x, -(target.y - enemy.y)) + Math.PI / 2;
+    if (minDist < 1400) {
+      // Calculate pincer flank coordinates around the target
+      const flankOffset = 220;
+      let targetX = target.x;
+      let targetY = target.y;
+
+      if (enemy.pincerRole === "PORT_PINCER") {
+        targetX += Math.cos(target.angle) * flankOffset;
+        targetY += Math.sin(target.angle) * flankOffset;
+      } else {
+        targetX -= Math.cos(target.angle) * flankOffset;
+        targetY -= Math.sin(target.angle) * flankOffset;
+      }
+
+      // Desired angle to achieve broadside pincer
+      const desiredAngle = Math.atan2(targetX - enemy.x, -(targetY - enemy.y)) + Math.PI / 2;
       let angleDiff = desiredAngle - enemy.angle;
       while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
       while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-      enemy.angle += angleDiff * 0.025;
+      enemy.angle += angleDiff * 0.03;
 
-      // Anti-Stranding Raycasting ahead of ship
-      const lookAheadX = enemy.x + Math.sin(enemy.angle) * 120;
-      const lookAheadY = enemy.y - Math.cos(enemy.angle) * 120;
+      // Anti-Stranding Sensor Array (Center, Left, Right Rays)
+      const rayDist = 160;
+      const centerRayX = enemy.x + Math.sin(enemy.angle) * rayDist;
+      const centerRayY = enemy.y - Math.cos(enemy.angle) * rayDist;
+      const leftRayX = enemy.x + Math.sin(enemy.angle - 0.5) * rayDist;
+      const leftRayY = enemy.y - Math.cos(enemy.angle - 0.5) * rayDist;
+      const rightRayX = enemy.x + Math.sin(enemy.angle + 0.5) * rayDist;
+      const rightRayY = enemy.y - Math.cos(enemy.angle + 0.5) * rayDist;
 
-      if (checkLandCollision(lookAheadX, lookAheadY)) {
-        // Turn sharply to open water to prevent land trapping
-        enemy.angle += 0.08;
+      if (checkLandCollision(centerRayX, centerRayY) || checkLandCollision(leftRayX, leftRayY) || checkLandCollision(rightRayX, rightRayY)) {
+        // Hard emergency turn toward deep ocean
+        enemy.angle += 0.12;
       } else {
         const eNextX = enemy.x + Math.sin(enemy.angle) * enemy.speed;
         const eNextY = enemy.y - Math.cos(enemy.angle) * enemy.speed;
@@ -372,8 +394,9 @@ function update() {
       }
     }
 
+    // Coordinated Broadside Firing
     enemy.cooldown--;
-    if (minDist < 500 && enemy.cooldown <= 0) {
+    if (minDist < 520 && enemy.cooldown <= 0) {
       const isPort = Math.random() > 0.5;
       const dir = isPort ? -1 : 1;
       const flankX = Math.cos(enemy.angle) * dir;
@@ -387,7 +410,7 @@ function update() {
         life: 70,
         faction: "ENEMY"
       });
-      enemy.cooldown = 110;
+      enemy.cooldown = 100;
     }
   });
 
@@ -407,18 +430,19 @@ function update() {
       }
     });
 
-    if (nearestEnemy && minD < 1100) {
+    if (nearestEnemy && minD < 1200) {
       const desiredAngle = Math.atan2(nearestEnemy.x - ally.x, -(nearestEnemy.y - ally.y)) + Math.PI / 2;
       let angleDiff = desiredAngle - ally.angle;
       while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
       while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-      ally.angle += angleDiff * 0.025;
+      ally.angle += angleDiff * 0.03;
 
-      const lookAheadX = ally.x + Math.sin(ally.angle) * 100;
-      const lookAheadY = ally.y - Math.cos(ally.angle) * 100;
+      const rayDist = 140;
+      const centerRayX = ally.x + Math.sin(ally.angle) * rayDist;
+      const centerRayY = ally.y - Math.cos(ally.angle) * rayDist;
 
-      if (checkLandCollision(lookAheadX, lookAheadY)) {
-        ally.angle += 0.08;
+      if (checkLandCollision(centerRayX, centerRayY)) {
+        ally.angle += 0.12;
       } else {
         const aNextX = ally.x + Math.sin(ally.angle) * ally.speed;
         const aNextY = ally.y - Math.cos(ally.angle) * ally.speed;
@@ -429,7 +453,7 @@ function update() {
       }
 
       ally.cooldown = (ally.cooldown || 0) - 1;
-      if (minD < 480 && ally.cooldown <= 0) {
+      if (minD < 500 && ally.cooldown <= 0) {
         const isPort = Math.random() > 0.5;
         const dir = isPort ? -1 : 1;
         const flankX = Math.cos(ally.angle) * dir;
@@ -443,12 +467,12 @@ function update() {
           life: 70,
           faction: "ALLY"
         });
-        ally.cooldown = 110;
+        ally.cooldown = 100;
       }
     }
   });
 
-  // Cannonballs Movement & Hits
+  // Cannonballs Mechanics
   for (let i = cannonballs.length - 1; i >= 0; i--) {
     const b = cannonballs[i];
     b.x += b.vx; b.y += b.vy; b.life--;
@@ -488,27 +512,24 @@ function drawPort(port) {
   ctx.translate(port.x, port.y);
   ctx.rotate(port.angle);
 
-  // Wooden Piers & Stonework Harbor Structures
-  ctx.fillStyle = "#4e342e"; // Dark wood pier
+  ctx.fillStyle = "#4e342e";
   ctx.fillRect(-60, -10, 120, 20);
   ctx.fillRect(-10, -60, 20, 120);
 
-  ctx.fillStyle = "#78909c"; // Stone quayside
+  ctx.fillStyle = "#78909c";
   ctx.beginPath();
   ctx.arc(0, 0, 35, 0, Math.PI * 2);
   ctx.fill();
 
-  // Lighthouse Tower
   ctx.fillStyle = "#ffffff";
   ctx.beginPath();
   ctx.arc(0, 0, 14, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = "#d32f2f"; // Red stripes
+  ctx.fillStyle = "#d32f2f";
   ctx.beginPath();
   ctx.arc(0, 0, 8, 0, Math.PI * 2);
   ctx.fill();
 
-  // Repair Zone Light Ring
   ctx.beginPath();
   ctx.arc(0, 0, port.radius, 0, Math.PI * 2);
   ctx.strokeStyle = "rgba(76, 175, 80, 0.4)";
@@ -531,7 +552,6 @@ function drawShip(x, y, angle, type, health, maxHealth) {
 
   const w = 28, h = 52, hX = -w / 2, hY = -h / 2;
 
-  // Correct Flank Guns
   ctx.fillStyle = "#111";
   ctx.fillRect(hX - 6, hY + 14, 6, 5);
   ctx.fillRect(hX - 6, hY + 32, 6, 5);
@@ -663,7 +683,7 @@ function drawHUD() {
     ctx.fillText(player.sailSetting === 0 ? "REPAIRING HULL AT HARBOR..." : "DROP SAILS (S) TO DOCK & REPAIR", canvas.width / 2 - 120, 45);
   }
 
-  // Victory Condition
+  // Victory
   const allEnemiesDefeated = enemies.length > 0 && enemies.every(e => e.health <= 0);
   if (allEnemiesDefeated) {
     playRuleBritannia();
@@ -678,7 +698,7 @@ function drawHUD() {
     ctx.fillText("All enemy armadas vanquished from the seas.", canvas.width / 2 - 200, canvas.height / 2 + 30);
   }
 
-  // Defeat Condition
+  // Defeat
   if (player.health <= 0) {
     playLaMarseillaise();
 
