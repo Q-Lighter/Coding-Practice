@@ -1,20 +1,18 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// Player properties
+// Player/Boat properties
 const player = {
-  x: 385,       // Starting horizontal position (center)
-  y: 285,       // Starting vertical position (center)
-  width: 30,    // Player size
-  height: 30,
-  speed: 4,     // Movement speed in pixels per frame
-  color: "#0077ff" // Blue character
+  x: 385,       // Center position
+  y: 285,
+  width: 24,    // Boat width
+  height: 40,   // Boat length
+  speed: 4,
 };
 
 // Track key presses
 const keys = {};
 
-// Event listeners for key movements
 window.addEventListener("keydown", (e) => {
   keys[e.key.toLowerCase()] = true;
 });
@@ -23,30 +21,48 @@ window.addEventListener("keyup", (e) => {
   keys[e.key.toLowerCase()] = false;
 });
 
-// Update player position based on active keys
+// Update boat position
 function update() {
-  if (keys["w"]) player.y -= player.speed; // Move Up
-  if (keys["s"]) player.y += player.speed; // Move Down
-  if (keys["a"]) player.x -= player.speed; // Move Left
-  if (keys["d"]) player.x += player.speed; // Move Right
+  if (keys["w"]) player.y -= player.speed; // North
+  if (keys["s"]) player.y += player.speed; // South
+  if (keys["a"]) player.x -= player.speed; // West
+  if (keys["d"]) player.x += player.speed; // East
 }
 
-// Draw everything on the screen
+// Function to draw the boat shape
+function drawBoat(x, y, w, h) {
+  // 1. Boat Main Hull (Base rectangle)
+  ctx.fillStyle = "#8B4513"; // Saddle Brown
+  ctx.fillRect(x, y, w, h);
+
+  // 2. Pointed Front/Bow (Triangle pointing Up)
+  ctx.beginPath();
+  ctx.moveTo(x, y);                   // Top-left of hull
+  ctx.lineTo(x + w / 2, y - 12);      // Pointed tip above the hull
+  ctx.lineTo(x + w, y);               // Top-right of hull
+  ctx.closePath();
+  ctx.fill();
+
+  // 3. Wooden Deck/Cabin Detail (Inner rectangle)
+  ctx.fillStyle = "#D2B48C"; // Tan/Light Wood
+  ctx.fillRect(x + 4, y + 8, w - 8, h - 14);
+}
+
+// Draw everything on screen
 function draw() {
-  // 1. Draw plain green background
-  ctx.fillStyle = "#2e8b57"; // Sea Green
+  // 1. Plain Blue Ocean Background
+  ctx.fillStyle = "#1e88e5"; // Ocean Blue
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // 2. Draw the blue player square
-  ctx.fillStyle = player.color;
-  ctx.fillRect(player.x, player.y, player.width, player.height);
+  // 2. Draw the boat figure
+  drawBoat(player.x, player.y, player.width, player.height);
 }
 
-// The core Game Loop
+// Core Game Loop
 function gameLoop() {
   update();
   draw();
-  requestAnimationFrame(gameLoop); // Runs loop around 60 times per second
+  requestAnimationFrame(gameLoop);
 }
 
 // Start the game loop
