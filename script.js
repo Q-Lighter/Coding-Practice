@@ -3,14 +3,18 @@ const ctx = canvas.getContext("2d");
 
 // Player/Boat properties
 const player = {
-  x: 385,       // Center position
-  y: 285,
-  width: 24,    // Boat width
-  height: 40,   // Boat length
-  speed: 4,
+  x: 400,
+  y: 300,
+  width: 26,
+  height: 48,
+  speed: 3.5,
+  angle: 0 // Orientation in radians (0 = pointing UP)
 };
 
-// Track key presses
+// Array to store particle wake/foam trails
+const wakeParticles = [];
+
+// Track active keys
 const keys = {};
 
 window.addEventListener("keydown", (e) => {
@@ -21,49 +25,143 @@ window.addEventListener("keyup", (e) => {
   keys[e.key.toLowerCase()] = false;
 });
 
-// Update boat position
+// Update boat position, rotation angle, and create wake particles
 function update() {
-  if (keys["w"]) player.y -= player.speed; // North
-  if (keys["s"]) player.y += player.speed; // South
-  if (keys["a"]) player.x -= player.speed; // West
-  if (keys["d"]) player.x += player.speed; // East
+  let moveX = 0;
+  let moveY = 0;
+
+  // Read WASD directional input
+  if (keys["w"]) moveY -= 1;
+  if (keys["s"]) moveY += 1;
+  if (keys["a"]) moveX -= 1;
+  if (keys["d"]) moveX += 1;
+
+  // Check if player is moving
+  if (moveX !== 0 || moveY !== 0) {
+    // Calculate movement vector and normalize speed for diagonal movement
+    const moveMagnitude = Math.hypot(moveX, moveY);
+    player.x += (moveX / moveMagnitude) * player.speed;
+    player.y += (moveY / moveMagnitude) * player.speed;
+
+    // Calculate angle facing direction (Adding Math.PI / 2 points bow forward)
+    player.angle = Math.atan2(moveY, moveX) + Math.PI / 2;
+
+    // Create water wake foam particles behind the boat
+    wakeParticles.push({
+      x: player.x,
+      y: player.y,
+      radius: Math.random() * 4 + 4,
+      alpha: 0.6,
+      sizeGrowth: 0.15
+    });
+  }
+
+  // Update existing wake particles (fade & expand over time)
+  for (let i = wakeParticles.length - 1; i >= 0; i--) {
+    const p = wakeParticles[i];
+    p.radius += p.sizeGrowth;
+    p.alpha -= 0.015;
+
+    // Remove invisible particles from memory
+    if (p.alpha <= 0) {
+      wakeParticles.splice(i, 1);
+    }
+  }
 }
 
-// Function to draw the boat shape
-function drawBoat(x, y, w, h) {
-  // 1. Boat Main Hull (Base rectangle)
-  ctx.fillStyle = "#8B4513"; // Saddle Brown
-  ctx.fillRect(x, y, w, h);
+// Draw water wake behind the boat
+function drawWake() {
+  for (const p of wakeParticles) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255, 255, 255, ${p.alpha})`;
+    ctx.fill();
+    ctx.restore();
+  }
+}
 
-  // 2. Pointed Front/Bow (Triangle pointing Up)
+// Draw the detailed boat with cannons and sails
+function drawBoat() {
+  ctx.save();
+  
+  // Translate coordinate space to boat center, then rotate canvas
+  ctx.translate(player.x, player.y);
+  ctx.rotate(player.angle);
+
+  const w = player.width;
+  const h = player.height;
+  const hX = -w / 2;
+  const hY = -h / 2;
+
+  // 1. CANNONS (Drawn underneath the hull)
+  ctx.fillStyle = "#111111"; // Iron Black
+  // Left side cannons (Port)
+  ctx.fillRect(hX - 4, hY + 14, 6, 4);
+  ctx.fillRect(hX - 4, hY + 28, 6, 4);
+  // Right side cannons (Starboard)
+  ctx.fillRect(hX + w - 2, hY + 14, 6, 4);
+  ctx.fillRect(hX + w - 2, hY + 28, 6, 4);
+
+  // 2. MAIN HULL (Brown Base)
+  ctx.fillStyle = "#653713";
+  ctx.fillRect(hX, hY, w, h);
+
+  // 3. POINTED BOW (Front of boat)
   ctx.beginPath();
-  ctx.moveTo(x, y);                   // Top-left of hull
-  ctx.lineTo(x + w / 2, y - 12);      // Pointed tip above the hull
-  ctx.lineTo(x + w, y);               // Top-right of hull
+  ctx.moveTo(hX, hY);
+  ctx.lineTo(0, hY - 16);
+  ctx.lineTo(hX + w, hY);
   ctx.closePath();
   ctx.fill();
 
-  // 3. Wooden Deck/Cabin Detail (Inner rectangle)
-  ctx.fillStyle = "#D2B48C"; // Tan/Light Wood
-  ctx.fillRect(x + 4, y + 8, w - 8, h - 14);
+  // 4. DECK (Inner wood color)
+  ctx.fillStyle = "#b8860b";
+  ctx.fillRect(hX + 3, hY + 6, w - 6, h - 10);
+
+  // 5. SAILS & MAST
+  // Wooden Yardarm / Crossbeam
+  ctx.fillStyle = "#3d2314";
+  ctx.fillRect(hX - 6, hY + 16, w + 12, 3);
+
+  // Main White Sail
+  ctx.fillStyle = "#f5f5f5";
+  ctx.beginPath();
+  ctx.moveTo(hX - 5, hY + 17);
+  ctx.quadraticCurveTo(0, hY + 25, hX + w + 5, hY + 17);
+  ctx.quadraticCurveTo(0, hY + 12, hX - 5, hY + 17);
+  ctx.fill();
+  ctx.strokeStyle = "#cccccc";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Center Mast Cap
+  ctx.fillStyle = "#222";
+  ctx.beginPath();
+  ctx.arc(0, hY + 17, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
 }
 
-// Draw everything on screen
+// Render Loop
 function draw() {
-  // 1. Plain Blue Ocean Background
-  ctx.fillStyle = "#1e88e5"; // Ocean Blue
+  // 1. Clear Ocean Background
+  ctx.fillStyle = "#1e88e5";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // 2. Draw the boat figure
-  drawBoat(player.x, player.y, player.width, player.height);
+  // 2. Render Wake Particle Trails
+  drawWake();
+
+  // 3. Render Boat
+  drawBoat();
 }
 
-// Core Game Loop
+// Game Loop
 function gameLoop() {
   update();
   draw();
   requestAnimationFrame(gameLoop);
 }
 
-// Start the game loop
 gameLoop();
