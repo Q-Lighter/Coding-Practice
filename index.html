@@ -32,14 +32,14 @@
 
   <div id="hud">
     <h3>HMS Victory - 3D Command</h3>
-    <p><b>W / S:</b> Sail Speed</p>
+    <p><b>W / S:</b> Sail Speed (Half / Full / Reverse)</p>
     <p><b>A / D:</b> Steer Ship</p>
     <p><b>J / L:</b> Fire Port / Starboard Broadside</p>
     <p><b>Space:</b> Broadside Both Sides</p>
   </div>
 
   <script>
-    // --- THREE.JS TOP-DOWN 3D NAVAL GAME (FIXED SCALE & RENDERING) ---
+    // --- THREE.JS TOP-DOWN 3D NAVAL GAME (MOVEMENT RESTORED) ---
 
     const container = document.body;
     const scene = new THREE.Scene();
@@ -72,7 +72,6 @@
     function createDetailedShip(isFrench) {
       const shipGroup = new THREE.Group();
 
-      // Hull Material (Deep Oak / Trafalgar Black)
       const hullMat = new THREE.MeshStandardMaterial({
         color: isFrench ? 0x1f1f1f : 0x4a2e18,
         roughness: 0.6,
@@ -94,7 +93,7 @@
       hullMesh.castShadow = true;
       shipGroup.add(hullMesh);
 
-      // Gun Deck Stripes (Trafalgar Yellow / White)
+      // Gun Deck Stripes
       const stripeMat = new THREE.MeshStandardMaterial({ color: isFrench ? 0xfbc02d : 0xdddddd });
       const stripeGeo1 = new THREE.BoxGeometry(42, 4, 98);
       const stripe1 = new THREE.Mesh(stripeGeo1, stripeMat);
@@ -120,7 +119,6 @@
         mastMesh.castShadow = true;
         shipGroup.add(mastMesh);
 
-        // Sails
         [35, 55].forEach(yHeight => {
           if (yHeight < mastHeight + 20) {
             const sailGeo = new THREE.BoxGeometry(34 - idx * 4, 16, 1.5);
@@ -132,16 +130,14 @@
         });
       });
 
-      // Flank Cannons (Strictly 90 degrees out of sides)
+      // Flank Cannons
       const cannonMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8 });
       [-30, -15, 0, 15, 30].forEach(zPos => {
-        // Port Cannon (Left)
         const portGun = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1, 10, 8), cannonMat);
         portGun.rotation.z = Math.PI / 2;
         portGun.position.set(-22, 20, zPos);
         shipGroup.add(portGun);
 
-        // Starboard Cannon (Right)
         const stbdGun = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1, 10, 8), cannonMat);
         stbdGun.rotation.z = -Math.PI / 2;
         stbdGun.position.set(22, 20, zPos);
@@ -176,10 +172,10 @@
       x: 0,
       z: 0,
       speed: 0,
-      maxSpeed: 3.0,
+      maxSpeed: 2.5,
       angle: 0,
       turnSpeed: 0.035,
-      sailSetting: 1,
+      sailSetting: 1, // Default half sail so it moves immediately
       health: 120,
       maxHealth: 120,
       cooldownLeft: 0,
@@ -192,7 +188,9 @@
     window.addEventListener("keydown", (e) => {
       const k = e.key.toLowerCase();
       keys[k] = true;
+      keys[e.key] = true;
 
+      // Sail controls
       if (k === "w" && player.sailSetting < 2) player.sailSetting++;
       if (k === "s" && player.sailSetting > -1) player.sailSetting--;
 
@@ -203,6 +201,7 @@
 
     window.addEventListener("keyup", (e) => {
       keys[e.key.toLowerCase()] = false;
+      keys[e.key] = false;
     });
 
     // --- PRECISE FLANK CANNON FIRING ---
@@ -225,12 +224,13 @@
           ballMesh.position.set(spawnX, 20, spawnZ);
           scene.add(ballMesh);
 
-          cannonballs.push({
+yny = {
             mesh: ballMesh,
             vx: vx,
             vz: vz,
             life: 80
-          });
+          };
+          cannonballs.push(yny);
         });
       }
 
@@ -251,16 +251,19 @@
       if (player.cooldownLeft > 0) player.cooldownLeft--;
       if (player.cooldownRight > 0) player.cooldownRight--;
 
+      // Steering
       if (keys["a"]) player.angle += player.turnSpeed;
       if (keys["d"]) player.angle -= player.turnSpeed;
 
+      // Speed control via W/S sail settings
       let targetSpeed = 0;
       if (player.sailSetting === 1) targetSpeed = player.maxSpeed * 0.5;
       if (player.sailSetting === 2) targetSpeed = player.maxSpeed;
       if (player.sailSetting === -1) targetSpeed = -player.maxSpeed * 0.3;
 
-      player.speed += (targetSpeed - player.speed) * 0.06;
+      player.speed += (targetSpeed - player.speed) * 0.05;
 
+      // Forward movement vector aligned with ship heading
       player.x += Math.sin(player.angle) * player.speed;
       player.z += Math.cos(player.angle) * player.speed;
 
